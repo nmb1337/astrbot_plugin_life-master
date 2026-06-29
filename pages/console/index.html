@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>主动聊天 - 管理面板</title>
+    <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header class="header">
+            <h1>💬 主动聊天插件</h1>
+            <p class="subtitle">管理主动聊天的提示词，支持增删改查，机器人将从中随机选择</p>
+        </header>
+
+        <!-- 状态栏 -->
+        <section class="section">
+            <h2>📊 插件状态</h2>
+            <div class="status-grid" id="statusGrid">
+                <div class="status-card">
+                    <span class="status-label">提示词总数</span>
+                    <span class="status-value" id="statusPromptCount">--</span>
+                </div>
+                <div class="status-card">
+                    <span class="status-label">启用状态</span>
+                    <span class="status-value" id="statusEnabled">--</span>
+                </div>
+                <div class="status-card">
+                    <span class="status-label">时间间隔</span>
+                    <span class="status-value" id="statusInterval">--</span>
+                </div>
+                <div class="status-card">
+                    <span class="status-label">表情包联动</span>
+                    <span class="status-value" id="statusSticker">--</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 提示词管理 -->
+        <section class="section">
+            <h2>📝 提示词管理</h2>
+            <p class="hint">
+                每个提示词会在机器人主动聊天时被 <strong>随机选中</strong>。建议至少保留 3 条以上以增加多样性。提示词中可使用变量：<code>{persona}</code> <code>{current_time}</code> <code>{extra_context}</code>
+            </p>
+
+            <!-- 添加新提示词 -->
+            <div class="add-prompt-section">
+                <h3>➕ 添加新提示词</h3>
+                <div class="add-prompt-form">
+                    <input
+                        type="text"
+                        id="newPromptName"
+                        class="input"
+                        placeholder="提示词名称，如「早安问候」「回忆聊天」"
+                        maxlength="50"
+                    />
+                    <textarea
+                        id="newPromptContent"
+                        class="textarea"
+                        rows="4"
+                        placeholder="提示词内容，如「现在是早上，请以轻松愉快的语气向群友问早安...」"
+                    ></textarea>
+                    <button class="btn btn-primary" id="btnAddPrompt">➕ 添加</button>
+                </div>
+                <p class="save-msg" id="addPromptMsg"></p>
+            </div>
+
+            <!-- 提示词列表 -->
+            <div class="prompt-list-section">
+                <h3>📋 已有提示词 <span class="badge" id="promptCountBadge">0</span></h3>
+                <div id="promptList" class="prompt-list">
+                    <p class="loading">加载中...</p>
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="btnSaveAll">💾 保存所有更改</button>
+                </div>
+                <p class="save-msg" id="saveAllMsg"></p>
+            </div>
+        </section>
+
+        <!-- 使用说明 -->
+        <section class="section">
+            <h2>📖 使用说明</h2>
+            <div class="help-content">
+                <h4>🎯 提示词变量</h4>
+                <table class="help-table">
+                    <tr><td><code>{persona}</code></td><td>机器人的当前人格设定（从 AstrBot 人格管理中读取）</td></tr>
+                    <tr><td><code>{current_time}</code></td><td>当前日期和时间，格式如「2026年06月29日 14:30，星期一」</td></tr>
+                    <tr><td><code>{extra_context}</code></td><td>额外上下文（时段提示 + 过往聊天回忆 + 人格参考）</td></tr>
+                </table>
+
+                <h4>💡 提示词建议</h4>
+                <ul>
+                    <li>每个提示词应描述<strong>一种主动聊天的场景或话题方向</strong></li>
+                    <li>提示词越具体，AI 生成的消息越精准</li>
+                    <li>可以结合 <code>{persona}</code> 让机器人按设定说话</li>
+                    <li>可以结合 <code>{extra_context}</code> 让机器人引用过往聊天</li>
+                    <li>建议保留 5-10 条不同方向的提示词，机器人随机选择</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 底部 -->
+        <footer class="footer">
+            <p>主动聊天插件 v1.0.0 | 基于 AstrBot 框架</p>
+        </footer>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,420 @@
+/* ============================================================
+   主动聊天插件 - 管理面板样式
+   ============================================================ */
+
+:root {
+    --bg: #f5f7fa;
+    --bg-card: #ffffff;
+    --text: #1a1a2e;
+    --text-secondary: #6b7280;
+    --border: #e5e7eb;
+    --primary: #4f46e5;
+    --primary-hover: #4338ca;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] {
+    --bg: #1a1a2e;
+    --bg-card: #16213e;
+    --text: #e0e0e0;
+    --text-secondary: #9ca3af;
+    --border: #374151;
+    --primary: #818cf8;
+    --primary-hover: #6366f1;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 16px;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* ---- Header ---- */
+.header {
+    text-align: center;
+    padding: 24px 0 16px;
+}
+
+.header h1 {
+    font-size: 1.8rem;
+    margin-bottom: 4px;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* ---- Section ---- */
+.section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+}
+
+.section h2 {
+    font-size: 1.15rem;
+    margin-bottom: 12px;
+}
+
+.section h3 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+    margin-top: 16px;
+}
+
+.hint {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+}
+
+.hint code {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+/* ---- Status Grid ---- */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.status-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    text-align: center;
+}
+
+.status-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.status-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* ---- Buttons ---- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.15s;
+}
+
+.btn:hover {
+    background: var(--bg);
+    border-color: var(--primary);
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
+
+.btn-sm {
+    padding: 4px 12px;
+    font-size: 0.8rem;
+}
+
+.btn-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.btn-danger:hover {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+}
+
+.btn-row {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+}
+
+/* ---- Inputs ---- */
+.input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    background: var(--bg-card);
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    background: var(--bg-card);
+    color: var(--text);
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+    margin-bottom: 8px;
+}
+
+.textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+/* ---- Add Prompt Form ---- */
+.add-prompt-section {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.add-prompt-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* ---- Prompt List ---- */
+.prompt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.prompt-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    transition: border-color 0.15s;
+}
+
+.prompt-item:hover {
+    border-color: var(--primary);
+}
+
+.prompt-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.prompt-item-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.prompt-item-name input {
+    border: 1px solid transparent;
+    background: transparent;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text);
+    padding: 2px 6px;
+    border-radius: 4px;
+    width: 100%;
+}
+
+.prompt-item-name input:hover {
+    border-color: var(--border);
+}
+
+.prompt-item-name input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--bg-card);
+}
+
+.prompt-item-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.prompt-item-content textarea {
+    width: 100%;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 4px 6px;
+    border-radius: 4px;
+    resize: vertical;
+    min-height: 48px;
+    font-family: inherit;
+    line-height: 1.5;
+}
+
+.prompt-item-content textarea:hover {
+    border-color: var(--border);
+}
+
+.prompt-item-content textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+.prompt-item-index {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-right: 8px;
+}
+
+/* ---- Badge ---- */
+.badge {
+    display: inline-block;
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+/* ---- Save Message ---- */
+.save-msg {
+    font-size: 0.85rem;
+    margin-top: 8px;
+    min-height: 20px;
+}
+
+.save-msg.success {
+    color: var(--success);
+}
+
+.save-msg.error {
+    color: var(--danger);
+}
+
+/* ---- Loading ---- */
+.loading {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    padding: 12px;
+}
+
+/* ---- Help Content ---- */
+.help-content h4 {
+    margin-top: 12px;
+    margin-bottom: 6px;
+    font-size: 0.95rem;
+}
+
+.help-content ul {
+    padding-left: 20px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.help-content li {
+    margin-bottom: 4px;
+}
+
+.help-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+}
+
+.help-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+.help-table td:first-child {
+    width: 160px;
+    font-weight: 600;
+}
+
+.help-table code {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+/* ---- Footer ---- */
+.footer {
+    text-align: center;
+    padding: 16px 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+    .status-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .prompt-item-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .prompt-item-actions {
+        margin-top: 6px;
+    }
+}

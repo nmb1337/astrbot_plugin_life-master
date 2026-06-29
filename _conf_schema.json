@@ -1,0 +1,106 @@
+{
+  "enable": {
+    "description": "是否启用插件",
+    "type": "bool",
+    "default": true
+  },
+  "min_interval_seconds": {
+    "description": "最小发送间隔（秒）",
+    "type": "int",
+    "default": 1800,
+    "hint": "机器人会在最小间隔和最大间隔之间随机选择一个时间点发送消息。建议不小于 600（10分钟）。"
+  },
+  "max_interval_seconds": {
+    "description": "最大发送间隔（秒）",
+    "type": "int",
+    "default": 7200,
+    "hint": "随机间隔的上限。必须大于最小间隔。"
+  },
+  "target_groups": {
+    "description": "目标群聊",
+    "type": "list",
+    "default": [],
+    "hint": "需要机器人主动聊天的群号列表，每行一个群号。留空则不对任何群主动发送。"
+  },
+  "prompt_template": {
+    "description": "主动聊天提示词模板",
+    "type": "text",
+    "default": "你是一个聊天机器人，现在你需要主动发起聊天。\n\n你的身份设定：\n{persona}\n\n当前时间：{current_time}\n\n{extra_context}\n\n请根据以上信息，自然地向群聊发送一条消息，主动开启话题。消息要求：\n1. 语气自然、口语化，像真人朋友聊天\n2. 消息简短（控制在100字以内）\n3. 符合你的身份设定\n4. 不要提及\"主动聊天\"、\"提示词\"等元信息\n\n请直接输出你要发送的消息内容，不要带任何前缀、引号或解释。",
+    "editor_mode": true,
+    "editor_language": "plaintext",
+    "hint": "兜底提示词模板（当 custom_prompts 为空时使用）。支持变量：{persona}、{current_time}、{extra_context}。"
+  },
+  "custom_prompts": {
+    "description": "自定义提示词列表（JSON）",
+    "type": "text",
+    "default": "[\n  {\n    \"name\": \"早安问候\",\n    \"content\": \"现在是早上，请以轻松愉快的语气向群友问早安，结合当天的日期和天气感觉，自然地开启新一天的话题。消息要自然简短，像真人朋友一样。\"\n  },\n  {\n    \"name\": \"晚安问候\",\n    \"content\": \"现在是晚上，请以温暖关心的语气向群友说晚安，可以提醒大家早点休息，或者说一些暖心的话。消息要自然简短。\"\n  },\n  {\n    \"name\": \"回忆聊天\",\n    \"content\": \"请回顾最近的聊天记录，找一个之前聊过但还没结束的话题，自然地继续聊下去。比如之前聊过的电影、音乐、游戏、美食等话题。语气要像朋友间的日常对话。\"\n  },\n  {\n    \"name\": \"人格话题\",\n    \"content\": \"请根据你的人格设定({persona})中的特征、爱好或背景故事，自然地引出相关话题。比如你的人格设定中提到喜欢某样东西，你可以分享相关的趣事或问群友的看法。\"\n  },\n  {\n    \"name\": \"日常分享\",\n    \"content\": \"请像一个普通朋友一样，分享一些日常生活中的小趣事或感悟。可以是对天气的吐槽、对某件事的看法、或者一个有趣的小问题来引发讨论。语气轻松自然。\"\n  },\n  {\n    \"name\": \"热点话题\",\n    \"content\": \"根据当前日期({current_time})，聊聊最近可能的热门话题或节日氛围。可以是最近的节假日安排、季节变化、或者一些轻松有趣的社会话题。引导群友参与讨论。\"\n  }\n]",
+    "editor_mode": true,
+    "editor_language": "json",
+    "hint": "JSON 数组格式。每条包含 name（名称）和 content（提示词内容）。机器人每次主动聊天时从中随机选择一条。推荐在插件页面中可视化编辑。"
+  },
+  "enable_time_greeting": {
+    "description": "启用时段问候",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，机器人在早上和晚上会发送早安/晚安类问候。"
+  },
+  "morning_greeting_prompt": {
+    "description": "早安问候提示词",
+    "type": "text",
+    "default": "现在是早上，请以轻松愉快的语气向群友问早安，可以结合天气、日期或鼓励大家开启新的一天。消息要自然简短。",
+    "editor_mode": true,
+    "editor_language": "plaintext",
+    "hint": "每天早上 6:00-9:00 触发时段问候时使用的额外提示。"
+  },
+  "night_greeting_prompt": {
+    "description": "晚安问候提示词",
+    "type": "text",
+    "default": "现在是晚上，请以温暖关心的语气向群友说晚安，提醒大家早点休息。消息要自然简短。",
+    "editor_mode": true,
+    "editor_language": "plaintext",
+    "hint": "每天晚上 21:00-24:00 触发时段问候时使用的额外提示。"
+  },
+  "enable_past_conversation": {
+    "description": "启用回忆过往聊天",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，机器人会尝试回忆与用户过往的聊天内容，并在主动聊天时提及。"
+  },
+  "past_conversation_count": {
+    "description": "回忆过往聊天条数",
+    "type": "int",
+    "default": 3,
+    "hint": "回忆最近几次对话的内容，用于生成相关话题。"
+  },
+  "enable_persona_chat": {
+    "description": "启用基于人格设定的聊天",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，机器人会根据用户在 AstrBot 中为其设置的人格（Persona）来生成聊天内容。"
+  },
+  "enable_sticker_integration": {
+    "description": "启用表情包联动",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，当安装了「AI智能表情包」插件（astrbot_plugin_ai_sticker）时，主动聊天消息也会自动搭配表情包。需确保该插件已启用。"
+  },
+  "sticker_probability": {
+    "description": "表情包联动概率",
+    "type": "int",
+    "default": 40,
+    "hint": "主动消息搭配表情包的概率（0-100）。仅在启用表情包联动时生效。",
+    "slider": {"min": 0, "max": 100, "step": 5}
+  },
+  "silent_hours_start": {
+    "description": "免打扰开始时间（时）",
+    "type": "int",
+    "default": 0,
+    "hint": "免打扰时段开始的小时数（0-23）。设为 0 且结束也为 0 表示不启用免打扰。"
+  },
+  "silent_hours_end": {
+    "description": "免打扰结束时间（时）",
+    "type": "int",
+    "default": 0,
+    "hint": "免打扰时段结束的小时数（0-23）。例如开始=1、结束=7 表示凌晨1点到早上7点不发送消息。"
+  }
+}

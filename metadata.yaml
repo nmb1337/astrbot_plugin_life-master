@@ -1,0 +1,10 @@
+name: astrbot_plugin_proactive_chat
+display_name: 主动聊天
+short_desc: 机器人主动发起聊天，支持自定义提示词、时间间隔，可联动表情包插件
+desc: 让机器人根据设定的提示词主动向群聊发送消息的插件。支持多种默认提示词模板（早安晚安、回忆过往聊天、基于人格设定聊天等），支持自定义最小/最大时间间隔随机发送，适配 AI 智能表情包插件联动发表情包。
+version: v1.0.0
+author: AstrBot Community
+repo: https://github.com/user/astrbot_plugin_proactive_chat
+astrbot_version: ">=4.16,<5"
+support_platforms:
+  - aiocqhttp
