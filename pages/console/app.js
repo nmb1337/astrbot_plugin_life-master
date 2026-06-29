@@ -201,10 +201,9 @@ async function deletePrompt(index) {
     if (!confirm(`确定要删除提示词「${p.name || '未命名'}」吗？此操作不可恢复。`)) return;
 
     try {
-        // index 直接拼在 URL 路径中，不依赖 POST body
-        const data = await bridge.apiPost(`prompts/delete/${idx}`, {});
-        const result = (typeof data === 'string') ? JSON.parse(data) : data;
-        prompts = result.prompts || [];
+        // 使用 apiGet + query 参数（官方推荐方式）
+        const data = await bridge.apiGet("prompts/delete", { index: idx });
+        prompts = data.prompts || [];
         renderPromptList();
         $("promptCountBadge").textContent = prompts.length;
         $("statusPromptCount").textContent = prompts.length + " 条";
@@ -223,10 +222,9 @@ async function movePrompt(index, direction) {
     if (newIndex < 0 || newIndex >= prompts.length) return;
 
     try {
-        // index 和 direction 直接拼在 URL 路径中
-        const data = await bridge.apiPost(`prompts/move/${idx}/${dir}`, {});
-        const result = (typeof data === 'string') ? JSON.parse(data) : data;
-        prompts = result.prompts || [];
+        // 使用 apiGet + query 参数（官方推荐方式）
+        const data = await bridge.apiGet("prompts/move", { index: idx, direction: dir });
+        prompts = data.prompts || [];
         renderPromptList();
     } catch (e) {
         console.error("移动失败:", e);

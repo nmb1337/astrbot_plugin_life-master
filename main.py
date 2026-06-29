@@ -593,16 +593,16 @@ class ProactiveChatPlugin(Star):
             "添加提示词",
         )
         self.context.register_web_api(
-            f"/{PLUGIN_NAME}/prompts/delete/<int:index>",
+            f"/{PLUGIN_NAME}/prompts/delete",
             self._api_delete_prompt,
-            ["POST", "GET"],
-            "删除提示词（index 在 URL 路径中）",
+            ["GET"],
+            "删除提示词（query: index）",
         )
         self.context.register_web_api(
-            f"/{PLUGIN_NAME}/prompts/move/<int:index>/<int:direction>",
+            f"/{PLUGIN_NAME}/prompts/move",
             self._api_move_prompt,
-            ["POST", "GET"],
-            "移动提示词顺序（index 和 direction 在 URL 路径中）",
+            ["GET"],
+            "移动提示词顺序（query: index, direction）",
         )
         self.context.register_web_api(
             f"/{PLUGIN_NAME}/prompts/save",
@@ -642,8 +642,15 @@ class ProactiveChatPlugin(Star):
         logger.info(f"[主动聊天] 已添加提示词「{name}」，共 {len(prompts)} 条")
         return json_response({"prompts": prompts})
 
-    async def _api_delete_prompt(self, index: int):
-        """删除一条提示词（index 来自 URL 路径）"""
+    async def _api_delete_prompt(self):
+        """删除一条提示词（query: index）"""
+        if _HAS_ASTRBOT_WEB:
+            index = request.query.get("index", type=int)
+        else:
+            index = request.args.get("index", type=int)
+        if index is None:
+            return error_response("缺少 index 参数", status_code=400)
+
         prompts = self._get_custom_prompts()
         if index < 0 or index >= len(prompts):
             return error_response(f"索引超出范围（0~{len(prompts)-1}），收到: {index}", status_code=400)
@@ -653,8 +660,17 @@ class ProactiveChatPlugin(Star):
         logger.info(f"[主动聊天] 已删除提示词「{removed.get('name', '')}」，共 {len(prompts)} 条")
         return json_response({"prompts": prompts})
 
-    async def _api_move_prompt(self, index: int, direction: int):
-        """移动提示词顺序（参数来自 URL 路径）"""
+    async def _api_move_prompt(self):
+        """移动提示词顺序（query: index, direction）"""
+        if _HAS_ASTRBOT_WEB:
+            index = request.query.get("index", type=int)
+            direction = request.query.get("direction", 0, type=int)
+        else:
+            index = request.args.get("index", type=int)
+            direction = request.args.get("direction", 0, type=int)
+        if index is None:
+            return error_response("缺少 index 参数", status_code=400)
+
         prompts = self._get_custom_prompts()
         new_index = index + direction
         if new_index < 0 or new_index >= len(prompts):
