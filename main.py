@@ -641,13 +641,22 @@ class ProactiveChatPlugin(Star):
         return json_response({"prompts": prompts})
 
     async def _api_save_prompts(self):
-        """批量保存提示词（前端编辑后提交整个列表）"""
-        payload = await _get_json_body(default={})
+        """批量保存提示词"""
+        # 优先读原始 body，避免框架层 body 解析问题
+        try:
+            if _HAS_ASTRBOT_WEB:
+                raw = await request.body()
+                payload = json.loads(raw) if raw else {}
+            else:
+                raw = await request.get_data()
+                payload = json.loads(raw) if raw else {}
+        except Exception:
+            payload = await _get_json_body(default={})
+
         new_prompts = payload.get("prompts")
         if not isinstance(new_prompts, list):
             return error_response("prompts 必须是数组", status_code=400)
 
-        # 验证每项格式
         cleaned = []
         for p in new_prompts:
             if isinstance(p, dict) and p.get("name") and p.get("content"):

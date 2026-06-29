@@ -20,12 +20,16 @@ function showMsg(elementId, text, type) {
     if (!el) return;
     el.textContent = text;
     el.className = "save-msg " + (type || "");
-    if (type === "success" || type === "error") {
+    // 错误消息不自动消失；成功消息 5 秒后消失
+    if (type === "success") {
         setTimeout(() => {
-            el.textContent = "";
-            el.className = "save-msg";
-        }, 4000);
+            if (el.textContent === text) {
+                el.textContent = "";
+                el.className = "save-msg";
+            }
+        }, 5000);
     }
+    // error 消息保持显示，直到下次操作覆盖
 }
 
 function escapeHtml(str) {
@@ -123,9 +127,9 @@ function renderPromptList() {
                     />
                 </span>
                 <span class="prompt-item-actions">
-                    <button class="btn btn-sm" onclick="movePrompt(${i}, -1)" title="上移">⬆</button>
-                    <button class="btn btn-sm" onclick="movePrompt(${i}, 1)" title="下移">⬇</button>
-                    <button class="btn btn-sm btn-danger" onclick="deletePrompt(${i})" title="删除">🗑</button>
+                    <button class="btn btn-sm btn-move-up" data-index="${i}" title="上移">⬆</button>
+                    <button class="btn btn-sm btn-move-down" data-index="${i}" title="下移">⬇</button>
+                    <button class="btn btn-sm btn-danger btn-delete" data-index="${i}" title="删除">🗑</button>
                 </span>
             </div>
             <div class="prompt-item-content">
@@ -141,6 +145,26 @@ function renderPromptList() {
     `
         )
         .join("");
+
+    // 绑定事件（用 addEventListener 代替 onclick）
+    container.querySelectorAll(".btn-delete").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const idx = parseInt(btn.dataset.index);
+            if (!isNaN(idx)) deletePrompt(idx);
+        });
+    });
+    container.querySelectorAll(".btn-move-up").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const idx = parseInt(btn.dataset.index);
+            if (!isNaN(idx)) movePrompt(idx, -1);
+        });
+    });
+    container.querySelectorAll(".btn-move-down").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const idx = parseInt(btn.dataset.index);
+            if (!isNaN(idx)) movePrompt(idx, 1);
+        });
+    });
 
     // 绑定输入事件，实时更新内存中的数据
     container.querySelectorAll(".prompt-name-input, .prompt-content-textarea").forEach((input) => {
@@ -193,31 +217,37 @@ async function addPrompt() {
 async function deletePrompt(index) {
     const idx = parseInt(index);
     if (isNaN(idx) || idx < 0 || idx >= prompts.length) {
-        console.error("无效的索引:", index, "prompts长度:", prompts.length);
+        showMsg("saveAllMsg", "❌ 无效的索引: " + index, "error");
         return;
     }
     const p = prompts[idx];
     if (!p) return;
-    if (!confirm(`确定要删除提示词「${p.name || '未命名'}」吗？此操作不可恢复。`)) return;
+    if (!confirm(`确定要删除提示词「${p.name || '未命名'}」吗？\n此操作不可恢复。`)) return;
 
-    // 直接从本地数组删除，然后调 save 持久化（不依赖额外的 delete API）
+    showMsg("saveAllMsg", "⏳ 正在保存...", "");
+
+    // 从本地数组删除
     prompts.splice(idx, 1);
     renderPromptList();
     $("promptCountBadge").textContent = prompts.length;
     $("statusPromptCount").textContent = prompts.length + " 条";
 
-    // 调 save 持久化
+    // 持久化：把整个数组发给后端保存
     try {
-        const data = await bridge.apiPost("prompts/save", { prompts });
-        const result = (typeof data === 'string') ? JSON.parse(data) : data;
-        prompts = result.prompts || [];
-        renderPromptList();
-        $("promptCountBadge").textContent = prompts.length;
-        $("statusPromptCount").textContent = prompts.length + " 条";
-        showMsg("saveAllMsg", `✅ 已删除，共 ${prompts.length} 条提示词`, "success");
+        const data = await bridge.apiPost("prompts/save", { prompts: [...prompts] });
+        if (data && data.prompts) {
+            prompts = data.prompts;
+            renderPromptList();
+            $("promptCountBadge").textContent = prompts.length;
+            $("statusPromptCount").textContent = prompts.length + " 条";
+            showMsg("saveAllMsg", `✅ 已删除，共 ${prompts.length} 条提示词`, "success");
+        } else {
+            showMsg("saveAllMsg", `✅ 已删除（共 ${prompts.length} 条），但后端返回异常: ${JSON.stringify(data)}`, "error");
+        }
     } catch (e) {
-        console.error("保存失败详情:", e);
-        showMsg("saveAllMsg", "❌ 保存失败: " + (e.message || e), "error");
+        showMsg("saveAllMsg", "❌ 保存失败: " + (e.message || String(e)), "error");
+        // 保存失败但本地已删，重新加载
+        try { await loadPrompts(); } catch (_) {}
     }
 }
 
@@ -228,41 +258,42 @@ async function movePrompt(index, direction) {
     const newIndex = idx + dir;
     if (newIndex < 0 || newIndex >= prompts.length) return;
 
-    // 直接从本地数组移动，然后调 save 持久化
+    // 本地移动
     const item = prompts.splice(idx, 1)[0];
     prompts.splice(newIndex, 0, item);
     renderPromptList();
 
-    // 调 save 持久化
+    // 持久化
     try {
-        const data = await bridge.apiPost("prompts/save", { prompts });
-        const result = (typeof data === 'string') ? JSON.parse(data) : data;
-        prompts = result.prompts || [];
-        renderPromptList();
+        const data = await bridge.apiPost("prompts/save", { prompts: [...prompts] });
+        if (data && data.prompts) {
+            prompts = data.prompts;
+            renderPromptList();
+        }
     } catch (e) {
         console.error("移动保存失败:", e);
+        try { await loadPrompts(); } catch (_) {}
     }
 }
 
 // ---- 保存所有提示词 ----
 async function saveAllPrompts() {
+    showMsg("saveAllMsg", "⏳ 正在保存...", "");
     try {
-        const data = await bridge.apiPost("prompts/save", { prompts });
-        const result = (typeof data === 'string') ? JSON.parse(data) : data;
-        prompts = result.prompts || [];
-        renderPromptList();
-        $("promptCountBadge").textContent = prompts.length;
-        $("statusPromptCount").textContent = prompts.length + " 条";
-        showMsg("saveAllMsg", `✅ 已保存 ${prompts.length} 条提示词`, "success");
+        const data = await bridge.apiPost("prompts/save", { prompts: [...prompts] });
+        if (data && data.prompts) {
+            prompts = data.prompts;
+            renderPromptList();
+            $("promptCountBadge").textContent = prompts.length;
+            $("statusPromptCount").textContent = prompts.length + " 条";
+            showMsg("saveAllMsg", `✅ 已保存 ${prompts.length} 条提示词`, "success");
+        } else {
+            showMsg("saveAllMsg", `⚠️ 保存后返回异常: ${JSON.stringify(data)}`, "error");
+        }
     } catch (e) {
-        console.error("保存失败详情:", e);
-        showMsg("saveAllMsg", "❌ 保存失败: " + (e.message || e), "error");
+        showMsg("saveAllMsg", "❌ 保存失败: " + (e.message || String(e)), "error");
     }
 }
-
-// ---- 全局函数暴露给 HTML onclick ----
-window.deletePrompt = deletePrompt;
-window.movePrompt = movePrompt;
 
 // ---- 启动 ----
 init();
