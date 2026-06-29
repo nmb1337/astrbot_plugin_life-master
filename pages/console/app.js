@@ -46,7 +46,9 @@ async function apiGet(endpoint, params = {}) {
 
 async function apiPost(endpoint, body = {}) {
     try {
-        return await bridge.apiPost(endpoint, body);
+        // 确保 body 是普通对象，bridge 内部会 JSON.stringify
+        const result = await bridge.apiPost(endpoint, body);
+        return result;
     } catch (e) {
         console.error("API POST error:", endpoint, e);
         throw e;
@@ -172,8 +174,9 @@ async function addPrompt() {
 
     // 通过 API 添加到后端
     try {
-        const data = await apiPost("prompts/add", { name, content });
-        prompts = data.prompts || [];
+        const data = await bridge.apiPost("prompts/add", { name, content });
+        const result = (typeof data === 'string') ? JSON.parse(data) : data;
+        prompts = result.prompts || [];
         renderPromptList();
         $("promptCountBadge").textContent = prompts.length;
         $("statusPromptCount").textContent = prompts.length + " 条";
@@ -181,38 +184,49 @@ async function addPrompt() {
         // 清空输入
         nameInput.value = "";
         contentInput.value = "";
-        showMsg("addPromptMsg", `✅ 已添加「${escapeHtml(name)}」，共 ${prompts.length} 条提示词`, "success");
+        showMsg("addPromptMsg", `✅ 已添加「${name}」，共 ${prompts.length} 条提示词`, "success");
     } catch (e) {
-        showMsg("addPromptMsg", "❌ 添加失败: " + e.message, "error");
+        console.error("添加失败详情:", e);
+        showMsg("addPromptMsg", "❌ 添加失败: " + (e.message || e), "error");
     }
 }
 
 // ---- 删除提示词 ----
 async function deletePrompt(index) {
-    const p = prompts[index];
+    const idx = parseInt(index);
+    if (isNaN(idx) || idx < 0 || idx >= prompts.length) {
+        console.error("无效的索引:", index, "prompts长度:", prompts.length);
+        return;
+    }
+    const p = prompts[idx];
     if (!p) return;
-    if (!confirm(`确定要删除提示词「${p.name}」吗？此操作不可恢复。`)) return;
+    if (!confirm(`确定要删除提示词「${p.name || '未命名'}」吗？此操作不可恢复。`)) return;
 
     try {
-        const data = await apiPost("prompts/delete", { index });
-        prompts = data.prompts || [];
+        const data = await bridge.apiPost("prompts/delete", { index: idx });
+        const result = (typeof data === 'string') ? JSON.parse(data) : data;
+        prompts = result.prompts || [];
         renderPromptList();
         $("promptCountBadge").textContent = prompts.length;
         $("statusPromptCount").textContent = prompts.length + " 条";
         showMsg("saveAllMsg", `✅ 已删除，共 ${prompts.length} 条提示词`, "success");
     } catch (e) {
-        showMsg("saveAllMsg", "❌ 删除失败: " + e.message, "error");
+        console.error("删除失败详情:", e);
+        showMsg("saveAllMsg", "❌ 删除失败: " + (e.message || e), "error");
     }
 }
 
 // ---- 移动提示词 ----
 async function movePrompt(index, direction) {
-    const newIndex = index + direction;
+    const idx = parseInt(index);
+    const dir = parseInt(direction);
+    const newIndex = idx + dir;
     if (newIndex < 0 || newIndex >= prompts.length) return;
 
     try {
-        const data = await apiPost("prompts/move", { index, direction });
-        prompts = data.prompts || [];
+        const data = await bridge.apiPost("prompts/move", { index: idx, direction: dir });
+        const result = (typeof data === 'string') ? JSON.parse(data) : data;
+        prompts = result.prompts || [];
         renderPromptList();
     } catch (e) {
         console.error("移动失败:", e);
@@ -221,16 +235,17 @@ async function movePrompt(index, direction) {
 
 // ---- 保存所有提示词 ----
 async function saveAllPrompts() {
-    // 由于编辑是实时更新 prompts 数组的，这里直接提交整个列表
     try {
-        const data = await apiPost("prompts/save", { prompts });
-        prompts = data.prompts || [];
+        const data = await bridge.apiPost("prompts/save", { prompts });
+        const result = (typeof data === 'string') ? JSON.parse(data) : data;
+        prompts = result.prompts || [];
         renderPromptList();
         $("promptCountBadge").textContent = prompts.length;
         $("statusPromptCount").textContent = prompts.length + " 条";
         showMsg("saveAllMsg", `✅ 已保存 ${prompts.length} 条提示词`, "success");
     } catch (e) {
-        showMsg("saveAllMsg", "❌ 保存失败: " + e.message, "error");
+        console.error("保存失败详情:", e);
+        showMsg("saveAllMsg", "❌ 保存失败: " + (e.message || e), "error");
     }
 }
 
