@@ -82,7 +82,7 @@
     "description": "启用表情包联动",
     "type": "bool",
     "default": true,
-    "hint": "开启后，当安装了「AI智能表情包」插件（astrbot_plugin_ai_sticker）时，主动聊天消息也会自动搭配表情包。需确保该插件已启用。"
+    "hint": "开启后，若已安装「AI智能表情包」插件，主动消息会自动搭配表情包。未安装时静默跳过。"
   },
   "sticker_probability": {
     "description": "表情包联动概率",

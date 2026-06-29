@@ -8,7 +8,7 @@
 - 支持插件 Page 可视化增删改查提示词
 - 支持多种提示词模板：早安晚安、回忆过往聊天、基于人格设定聊天
 - 支持免打扰时段
-- 适配 AI 智能表情包插件（astrbot_plugin_ai_sticker），联动发表情包
+- 适配 AI 智能表情包插件（astrbot_plugin_ai_sticker），静默联动发表情包
 - 支持 WebUI 配置管理
 - 支持管理指令：/proactive_chat status/trigger/reload/start/stop
 
@@ -108,7 +108,7 @@ async def _get_json_body(default=None):
             return default
 
 
-@register(PLUGIN_NAME, "AstrBot Community", "机器人主动聊天：根据提示词定时向群聊发起话题，支持联动表情包插件", "1.0.0")
+@register(PLUGIN_NAME, "AstrBot Community", "机器人主动聊天：根据提示词定时向群聊发起话题，支持联动表情包", "1.0.0")
 class ProactiveChatPlugin(Star):
     """主动聊天插件"""
 
@@ -122,9 +122,9 @@ class ProactiveChatPlugin(Star):
         # 每个群的异步任务：umo -> asyncio.Task
         self._tasks: dict[str, asyncio.Task] = {}
 
-        # 表情包插件引用（延迟加载）
+        # 表情包插件引用（静默检测，不对外显示状态）
         self._sticker_plugin = None
-        self._sticker_plugin_checked = False
+        self._sticker_checked = False
 
         # 注册 Web API（供 Plugin Page 使用）
         self._register_web_apis()
@@ -240,7 +240,7 @@ class ProactiveChatPlugin(Star):
         logger.info(f"[主动聊天] 随机选中提示词: 「{name}」")
         return content
 
-    def _is_sticker_integration_enabled(self) -> bool:
+    def _is_sticker_enabled(self) -> bool:
         return bool(self.config.get("enable_sticker_integration", True))
 
     def _get_sticker_probability(self) -> int:
@@ -328,19 +328,17 @@ class ProactiveChatPlugin(Star):
 
         logger.info(f"[主动聊天] AI 生成: {message_text}")
 
-        # 3. 构建消息链
+        # 3. 尝试搭配表情包（静默，失败不报错）
         import astrbot.api.message_components as Comp
         chain = [Comp.Plain(message_text)]
-
-        # 4. 尝试联动表情包
         sticker_path = await self._try_get_sticker_image(message_text)
         if sticker_path:
             try:
                 chain.append(Comp.Image.fromFileSystem(str(sticker_path)))
-            except Exception as e:
-                logger.warning(f"[主动聊天] 追加表情包失败: {e}")
+            except Exception:
+                pass  # 表情包追加失败不影响主流程
 
-        # 5. 发送
+        # 4. 发送
         try:
             message_chain = MessageChain()
             for comp in chain:
@@ -354,7 +352,6 @@ class ProactiveChatPlugin(Star):
                         url = getattr(comp, 'url', None)
                         if url:
                             message_chain.image(url)
-
             await self.context.send_message(umo, message_chain)
             logger.info(f"[主动聊天] ✅ 已向 {target} 发送主动消息")
         except Exception as e:
@@ -596,16 +593,16 @@ class ProactiveChatPlugin(Star):
             "添加提示词",
         )
         self.context.register_web_api(
-            f"/{PLUGIN_NAME}/prompts/delete",
+            f"/{PLUGIN_NAME}/prompts/delete/<int:index>",
             self._api_delete_prompt,
-            ["POST"],
-            "删除提示词",
+            ["POST", "GET"],
+            "删除提示词（index 在 URL 路径中）",
         )
         self.context.register_web_api(
-            f"/{PLUGIN_NAME}/prompts/move",
+            f"/{PLUGIN_NAME}/prompts/move/<int:index>/<int:direction>",
             self._api_move_prompt,
-            ["POST"],
-            "移动提示词顺序",
+            ["POST", "GET"],
+            "移动提示词顺序（index 和 direction 在 URL 路径中）",
         )
         self.context.register_web_api(
             f"/{PLUGIN_NAME}/prompts/save",
@@ -623,7 +620,6 @@ class ProactiveChatPlugin(Star):
             "enabled": self._is_enabled(),
             "prompt_count": len(prompts),
             "interval": f"{self._get_min_interval()}s ~ {self._get_max_interval()}s",
-            "sticker_available": self._sticker_plugin is not None,
             "silent_hours": f"{self._get_silent_start()}:00 - {self._get_silent_end()}:00",
         })
 
@@ -646,21 +642,8 @@ class ProactiveChatPlugin(Star):
         logger.info(f"[主动聊天] 已添加提示词「{name}」，共 {len(prompts)} 条")
         return json_response({"prompts": prompts})
 
-    async def _api_delete_prompt(self):
-        """删除一条提示词"""
-        payload = await _get_json_body(default={})
-        if not payload:
-            return error_response("请求体为空", status_code=400)
-
-        index = payload.get("index")
-        if index is None:
-            return error_response("缺少 index 参数", status_code=400)
-
-        try:
-            index = int(index)
-        except (TypeError, ValueError):
-            return error_response("index 必须是整数", status_code=400)
-
+    async def _api_delete_prompt(self, index: int):
+        """删除一条提示词（index 来自 URL 路径）"""
         prompts = self._get_custom_prompts()
         if index < 0 or index >= len(prompts):
             return error_response(f"索引超出范围（0~{len(prompts)-1}），收到: {index}", status_code=400)
@@ -670,14 +653,8 @@ class ProactiveChatPlugin(Star):
         logger.info(f"[主动聊天] 已删除提示词「{removed.get('name', '')}」，共 {len(prompts)} 条")
         return json_response({"prompts": prompts})
 
-    async def _api_move_prompt(self):
-        """移动提示词顺序"""
-        payload = await _get_json_body(default={})
-        index = payload.get("index")
-        direction = payload.get("direction", 0)
-        if index is None:
-            return error_response("缺少 index 参数", status_code=400)
-
+    async def _api_move_prompt(self, index: int, direction: int):
+        """移动提示词顺序（参数来自 URL 路径）"""
         prompts = self._get_custom_prompts()
         new_index = index + direction
         if new_index < 0 or new_index >= len(prompts):
@@ -713,24 +690,20 @@ class ProactiveChatPlugin(Star):
             logger.error(f"[主动聊天] 保存提示词配置失败: {e}")
 
     # ------------------------------------------------------------------
-    # 表情包联动（适配 astrbot_plugin_ai_sticker）
+    # 表情包适配（静默模式：尝试使用，不可用时静默跳过，不显示状态）
     # ------------------------------------------------------------------
 
     async def _try_get_sticker_image(self, message_text: str):
-        """
-        尝试通过 AI 智能表情包插件获取一张表情包。
-        返回图片路径，失败返回 None。
-        """
-        if not self._is_sticker_integration_enabled():
+        """尝试获取一张表情包。成功返回路径，失败返回 None（不报错）。"""
+        if not self._is_sticker_enabled():
             return None
-
         prob = self._get_sticker_probability()
         if prob <= 0:
             return None
         if prob < 100 and random.randint(1, 100) > prob:
             return None
 
-        sticker = await self._get_sticker_plugin_instance()
+        sticker = await self._find_sticker_plugin()
         if not sticker:
             return None
 
@@ -740,134 +713,59 @@ class ProactiveChatPlugin(Star):
             if not categories or not category_images:
                 return None
 
-            # 尝试使用 AI 分类选择表情包分类
-            category = await self._classify_for_sticker(sticker, message_text, categories)
-            if not category:
-                category = random.choice(categories)
-
+            category = random.choice(categories)
             images = category_images.get(category, [])
             if not images:
                 return None
 
             img_path = random.choice(images)
-            logger.info(f"[主动聊天] 联动表情包: 分类「{category}」-> {img_path.name}")
+            logger.info(f"[主动聊天] 表情包「{category}」-> {img_path.name}")
             return img_path
-
-        except Exception as e:
-            logger.warning(f"[主动聊天] 表情包联动失败: {e}")
+        except Exception:
             return None
 
-    async def _classify_for_sticker(self, sticker, message_text: str, categories: list) -> str | None:
-        """使用 AI 分析消息语气，匹配表情包分类"""
-        try:
-            # 获取分类描述
-            descriptions = {}
-            raw_desc = sticker.config.get("category_descriptions", "{}")
-            if isinstance(raw_desc, str):
-                try:
-                    descriptions = json.loads(raw_desc)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            elif isinstance(raw_desc, dict):
-                descriptions = raw_desc
-
-            category_lines = []
-            for cat in categories:
-                desc = descriptions.get(cat, cat)
-                category_lines.append(f"- {cat}：{desc}")
-            categories_text = "\n".join(category_lines)
-
-            classify_prompt = (
-                "你是一个表情包分类助手。请根据消息的语气和情绪，选择最合适的表情包分类。\n\n"
-                f"可用的表情包分类：\n{categories_text}\n\n"
-                f"消息内容：\n\"{message_text}\"\n\n"
-                "请仅返回分类名称。如果不适合搭配表情包，返回\"不发送\"。"
-            )
-
-            provider_id = await self._get_provider_id()
-            if not provider_id:
-                return None
-
-            llm_resp = await self.context.llm_generate(
-                chat_provider_id=provider_id,
-                prompt=classify_prompt,
-            )
-            if not llm_resp:
-                return None
-
-            result = llm_resp.completion_text.strip()
-            result = result.strip("。，！？、\"'「」『』\n\r\t ")
-
-            if result == "不发送":
-                return None
-
-            for cat in categories:
-                if result == cat:
-                    return cat
-            for cat in categories:
-                if result.startswith(cat):
-                    return cat
-
-            return None
-        except Exception as e:
-            logger.warning(f"[主动聊天] 表情包分类失败: {e}")
-            return None
-
-    async def _get_sticker_plugin_instance(self):
-        """获取 AI 表情包插件实例"""
-        if self._sticker_plugin_checked and self._sticker_plugin is not None:
+    async def _find_sticker_plugin(self):
+        """查找表情包插件实例（静默，不打印"未检测到"）"""
+        if self._sticker_checked and self._sticker_plugin is not None:
             return self._sticker_plugin
+        if self._sticker_checked:
+            return None
 
-        # 每次 reload 时允许重新检测
-        if self._sticker_plugin_checked:
-            self._sticker_plugin_checked = False
-
-        self._sticker_plugin_checked = True
+        self._sticker_checked = True
 
         try:
-            # 方式1: 通过 sys.modules 查找已加载的插件模块（最可靠）
             for mod_name, module in list(sys.modules.items()):
                 if 'astrbot_plugin_ai_sticker' in mod_name or 'astrbot_plugin_god' in mod_name:
-                    # 遍历模块中的所有对象，找到插件类实例
                     for attr_name in dir(module):
                         try:
                             obj = getattr(module, attr_name)
                             if obj is None:
                                 continue
-                            cls_name = obj.__class__.__name__
-                            if 'AISticker' in cls_name or 'Sticker' in cls_name:
-                                # 验证它有 categories 和 category_images 属性
+                            if 'AISticker' in obj.__class__.__name__:
                                 if hasattr(obj, 'categories') and hasattr(obj, 'category_images'):
                                     self._sticker_plugin = obj
-                                    logger.info(f"[主动聊天] ✅ 通过 sys.modules 检测到表情包插件（{mod_name}），联动已就绪")
+                                    logger.info("[主动聊天] 已连接表情包插件，主动消息可搭配表情包")
                                     return obj
                         except Exception:
                             continue
 
-            # 方式2: 通过 context.plugin_manager
             if hasattr(self.context, 'plugin_manager'):
                 pm = self.context.plugin_manager
-                for attr in ('plugins', '_plugins', 'plugin_instances', '_instances'):
+                for attr in ('plugins', '_plugins', 'plugin_instances'):
                     plugins = getattr(pm, attr, None)
-                    if plugins:
-                        if isinstance(plugins, dict):
-                            for key, p in plugins.items():
-                                cls_name = p.__class__.__name__ if hasattr(p, '__class__') else ''
-                                if 'AISticker' in cls_name and hasattr(p, 'categories'):
-                                    self._sticker_plugin = p
-                                    logger.info(f"[主动聊天] ✅ 通过 plugin_manager.{attr} 检测到表情包插件，联动已就绪")
-                                    return p
-                        elif isinstance(plugins, (list, tuple)):
-                            for p in plugins:
-                                cls_name = p.__class__.__name__ if hasattr(p, '__class__') else ''
-                                if 'AISticker' in cls_name and hasattr(p, 'categories'):
-                                    self._sticker_plugin = p
-                                    logger.info(f"[主动聊天] ✅ 通过 plugin_manager.{attr} 检测到表情包插件，联动已就绪")
-                                    return p
-
-            logger.info("[主动聊天] 未检测到表情包插件（astrbot_plugin_ai_sticker），联动不可用。请确保该插件已启用。")
-        except Exception as e:
-            logger.warning(f"[主动聊天] 查找表情包插件出错: {e}")
+                    if not plugins:
+                        continue
+                    items = plugins.values() if isinstance(plugins, dict) else plugins
+                    for p in items:
+                        try:
+                            if 'AISticker' in p.__class__.__name__ and hasattr(p, 'categories'):
+                                self._sticker_plugin = p
+                                logger.info("[主动聊天] 已连接表情包插件，主动消息可搭配表情包")
+                                return p
+                        except Exception:
+                            continue
+        except Exception:
+            pass
 
         return None
 
@@ -888,7 +786,6 @@ class ProactiveChatPlugin(Star):
         min_sec = self._get_min_interval()
         max_sec = self._get_max_interval()
         active = len(self._tasks)
-        sticker_ok = self._sticker_plugin is not None
         prompt_count = len(self._get_custom_prompts())
 
         lines = [
@@ -899,7 +796,6 @@ class ProactiveChatPlugin(Star):
             f"• 时间间隔: {min_sec}s ~ {max_sec}s",
             f"• 免打扰: {self._get_silent_start()}:00-{self._get_silent_end()}:00",
             f"• 提示词数: {prompt_count} 条（每次随机选择）",
-            f"• 表情包联动: {'✅ 已连接' if sticker_ok else '⚠️ 未检测到'}",
         ]
         if targets:
             lines.append("• 目标群:")
@@ -928,8 +824,6 @@ class ProactiveChatPlugin(Star):
     @filter.permission_type(filter.PermissionType.ADMIN)
     async def cmd_reload(self, event: AstrMessageEvent):
         """管理员：重新加载配置并重启所有任务"""
-        self._sticker_plugin_checked = False
-        self._sticker_plugin = None
         self._start_all_tasks()
         yield event.plain_result(f"✅ 已重载！当前为 {len(self._tasks)} 个群启动了主动聊天。")
 

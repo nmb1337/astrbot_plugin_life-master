@@ -78,8 +78,6 @@ async function loadStatus() {
         $("statusEnabled").textContent = data.enabled ? "✅ 已启用" : "⛔ 已禁用";
         $("statusEnabled").style.color = data.enabled ? "var(--success)" : "var(--danger)";
         $("statusInterval").textContent = data.interval;
-        $("statusSticker").textContent = data.sticker_available ? "✅ 已连接" : "⚠️ 未检测到";
-        $("statusSticker").style.color = data.sticker_available ? "var(--success)" : "var(--warning)";
     } catch (e) {
         console.error("加载状态失败:", e);
     }
@@ -203,7 +201,8 @@ async function deletePrompt(index) {
     if (!confirm(`确定要删除提示词「${p.name || '未命名'}」吗？此操作不可恢复。`)) return;
 
     try {
-        const data = await bridge.apiPost("prompts/delete", { index: idx });
+        // index 直接拼在 URL 路径中，不依赖 POST body
+        const data = await bridge.apiPost(`prompts/delete/${idx}`, {});
         const result = (typeof data === 'string') ? JSON.parse(data) : data;
         prompts = result.prompts || [];
         renderPromptList();
@@ -224,7 +223,8 @@ async function movePrompt(index, direction) {
     if (newIndex < 0 || newIndex >= prompts.length) return;
 
     try {
-        const data = await bridge.apiPost("prompts/move", { index: idx, direction: dir });
+        // index 和 direction 直接拼在 URL 路径中
+        const data = await bridge.apiPost(`prompts/move/${idx}/${dir}`, {});
         const result = (typeof data === 'string') ? JSON.parse(data) : data;
         prompts = result.prompts || [];
         renderPromptList();
