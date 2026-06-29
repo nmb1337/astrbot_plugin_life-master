@@ -22,6 +22,12 @@
     "default": [],
     "hint": "需要机器人主动聊天的群号列表，每行一个群号。留空则不对任何群主动发送。"
   },
+  "private_targets": {
+    "description": "目标私聊",
+    "type": "list",
+    "default": [],
+    "hint": "需要机器人主动私聊的用户 QQ 号列表，每行一个。留空则不对任何人主动私聊。"
+  },
   "prompt_template": {
     "description": "主动聊天提示词模板",
     "type": "text",

@@ -156,19 +156,22 @@ class ProactiveChatPlugin(Star):
             logger.info("[主动聊天] 插件已禁用，跳过启动")
             return
 
-        targets = self._get_target_groups()
-        if not targets:
-            logger.info("[主动聊天] 未配置目标群聊，跳过启动")
+        group_targets = self._get_target_groups()
+        private_targets = self._get_private_targets()
+        all_targets = [(t, "群聊") for t in group_targets] + [(t, "私聊") for t in private_targets]
+
+        if not all_targets:
+            logger.info("[主动聊天] 未配置任何目标（群聊或私聊），跳过启动")
             return
 
-        for target in targets:
-            umo = self._resolve_umo(target)
+        for target, target_type in all_targets:
+            umo = self._resolve_umo(target, target_type)
             if not umo:
                 logger.warning(f"[主动聊天] 无法解析目标: {target}，跳过")
                 continue
             task = asyncio.create_task(self._proactive_loop(umo, target))
             self._tasks[umo] = task
-            logger.info(f"[主动聊天] 已为 {target} 启动主动聊天循环")
+            logger.info(f"[主动聊天] 已为 {target_type}:{target} 启动主动聊天循环")
 
     def _stop_all_tasks(self):
         """取消所有主动聊天任务"""
@@ -186,6 +189,10 @@ class ProactiveChatPlugin(Star):
 
     def _get_target_groups(self) -> list[str]:
         val = self.config.get("target_groups", [])
+        return val if isinstance(val, list) else []
+
+    def _get_private_targets(self) -> list[str]:
+        val = self.config.get("private_targets", [])
         return val if isinstance(val, list) else []
 
     def _get_min_interval(self) -> int:
@@ -284,8 +291,9 @@ class ProactiveChatPlugin(Star):
                     logger.info("[主动聊天] 插件已禁用，退出循环")
                     return
 
-                # 检查目标群是否仍在配置中
-                if target not in self._get_target_groups():
+                # 检查目标是否仍在配置中（群聊+私聊）
+                all_targets = self._get_target_groups() + self._get_private_targets()
+                if target not in all_targets:
                     logger.info(f"[主动聊天] {target} 已从配置移除，退出循环")
                     return
 
@@ -552,11 +560,11 @@ class ProactiveChatPlugin(Star):
     # UMO 解析
     # ------------------------------------------------------------------
 
-    def _resolve_umo(self, target: str) -> str | None:
+    def _resolve_umo(self, target: str, target_type: str = "群聊") -> str | None:
         """
         解析 unified_msg_origin。
-        支持：纯数字群号 -> 默认 aiocqhttp:group:{id}
-             完整 UMO -> 直接使用
+        target_type: "群聊" -> aiocqhttp:group:{id}, "私聊" -> aiocqhttp:private:{id}
+        也支持完整 UMO 格式直接使用。
         """
         target = target.strip()
         if not target:
@@ -564,6 +572,8 @@ class ProactiveChatPlugin(Star):
         if ":" in target and target.count(":") >= 2:
             return target
         if target.isdigit():
+            if target_type == "私聊":
+                return f"aiocqhttp:private:{target}"
             return f"aiocqhttp:group:{target}"
         logger.warning(f"[主动聊天] 无法解析目标: {target}")
         return None
@@ -591,18 +601,6 @@ class ProactiveChatPlugin(Star):
             self._api_add_prompt,
             ["POST"],
             "添加提示词",
-        )
-        self.context.register_web_api(
-            f"/{PLUGIN_NAME}/prompts/delete",
-            self._api_delete_prompt,
-            ["GET"],
-            "删除提示词（query: index）",
-        )
-        self.context.register_web_api(
-            f"/{PLUGIN_NAME}/prompts/move",
-            self._api_move_prompt,
-            ["GET"],
-            "移动提示词顺序（query: index, direction）",
         )
         self.context.register_web_api(
             f"/{PLUGIN_NAME}/prompts/save",
@@ -640,44 +638,6 @@ class ProactiveChatPlugin(Star):
         prompts.append({"name": name, "content": content})
         self._save_prompts(prompts)
         logger.info(f"[主动聊天] 已添加提示词「{name}」，共 {len(prompts)} 条")
-        return json_response({"prompts": prompts})
-
-    async def _api_delete_prompt(self):
-        """删除一条提示词（query: index）"""
-        if _HAS_ASTRBOT_WEB:
-            index = request.query.get("index", type=int)
-        else:
-            index = request.args.get("index", type=int)
-        if index is None:
-            return error_response("缺少 index 参数", status_code=400)
-
-        prompts = self._get_custom_prompts()
-        if index < 0 or index >= len(prompts):
-            return error_response(f"索引超出范围（0~{len(prompts)-1}），收到: {index}", status_code=400)
-
-        removed = prompts.pop(index)
-        self._save_prompts(prompts)
-        logger.info(f"[主动聊天] 已删除提示词「{removed.get('name', '')}」，共 {len(prompts)} 条")
-        return json_response({"prompts": prompts})
-
-    async def _api_move_prompt(self):
-        """移动提示词顺序（query: index, direction）"""
-        if _HAS_ASTRBOT_WEB:
-            index = request.query.get("index", type=int)
-            direction = request.query.get("direction", 0, type=int)
-        else:
-            index = request.args.get("index", type=int)
-            direction = request.args.get("direction", 0, type=int)
-        if index is None:
-            return error_response("缺少 index 参数", status_code=400)
-
-        prompts = self._get_custom_prompts()
-        new_index = index + direction
-        if new_index < 0 or new_index >= len(prompts):
-            return error_response("无法移动（边界）", status_code=400)
-
-        prompts.insert(new_index, prompts.pop(index))
-        self._save_prompts(prompts)
         return json_response({"prompts": prompts})
 
     async def _api_save_prompts(self):
@@ -798,7 +758,8 @@ class ProactiveChatPlugin(Star):
     async def cmd_status(self, event: AstrMessageEvent):
         """查看主动聊天插件运行状态"""
         enabled = self._is_enabled()
-        targets = self._get_target_groups()
+        groups = self._get_target_groups()
+        privates = self._get_private_targets()
         min_sec = self._get_min_interval()
         max_sec = self._get_max_interval()
         active = len(self._tasks)
@@ -807,16 +768,22 @@ class ProactiveChatPlugin(Star):
         lines = [
             "📊 **主动聊天插件状态**",
             f"• 启用: {'✅ 已启用' if enabled else '❌ 已禁用'}",
-            f"• 目标群数: {len(targets)}",
+            f"• 目标群聊: {len(groups)} 个 | 私聊: {len(privates)} 个",
             f"• 活跃任务: {active}",
             f"• 时间间隔: {min_sec}s ~ {max_sec}s",
             f"• 免打扰: {self._get_silent_start()}:00-{self._get_silent_end()}:00",
             f"• 提示词数: {prompt_count} 条（每次随机选择）",
         ]
-        if targets:
-            lines.append("• 目标群:")
-            for t in targets:
-                umo = self._resolve_umo(t)
+        if groups:
+            lines.append("• 群聊目标:")
+            for t in groups:
+                umo = self._resolve_umo(t, "群聊")
+                mark = "🟢" if (umo and umo in self._tasks) else "🔴"
+                lines.append(f"  {mark} {t}")
+        if privates:
+            lines.append("• 私聊目标:")
+            for t in privates:
+                umo = self._resolve_umo(t, "私聊")
                 mark = "🟢" if (umo and umo in self._tasks) else "🔴"
                 lines.append(f"  {mark} {t}")
 
@@ -825,15 +792,13 @@ class ProactiveChatPlugin(Star):
     @proactive_chat.command("trigger")
     @filter.permission_type(filter.PermissionType.ADMIN)
     async def cmd_trigger(self, event: AstrMessageEvent):
-        """管理员：在当前群立即触发一次主动聊天"""
-        group_id = event.message_obj.group_id
-        if not group_id:
-            yield event.plain_result("⚠️ 此指令仅支持群聊")
-            return
-
+        """管理员：在当前会话立即触发一次主动聊天（支持群聊和私聊）"""
         umo = event.unified_msg_origin
-        target = group_id
-        yield event.plain_result(f"🚀 正在为群 {target} 生成主动消息...")
+        group_id = event.message_obj.group_id
+        target = group_id if group_id else event.get_sender_id()
+        target_type = "群聊" if group_id else "私聊"
+
+        yield event.plain_result(f"🚀 正在为当前{target_type}生成主动消息...")
         await self._send_proactive_message(umo, target)
 
     @proactive_chat.command("reload")

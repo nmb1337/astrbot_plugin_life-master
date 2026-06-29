@@ -200,17 +200,24 @@ async function deletePrompt(index) {
     if (!p) return;
     if (!confirm(`确定要删除提示词「${p.name || '未命名'}」吗？此操作不可恢复。`)) return;
 
+    // 直接从本地数组删除，然后调 save 持久化（不依赖额外的 delete API）
+    prompts.splice(idx, 1);
+    renderPromptList();
+    $("promptCountBadge").textContent = prompts.length;
+    $("statusPromptCount").textContent = prompts.length + " 条";
+
+    // 调 save 持久化
     try {
-        // 使用 apiGet + query 参数（官方推荐方式）
-        const data = await bridge.apiGet("prompts/delete", { index: idx });
-        prompts = data.prompts || [];
+        const data = await bridge.apiPost("prompts/save", { prompts });
+        const result = (typeof data === 'string') ? JSON.parse(data) : data;
+        prompts = result.prompts || [];
         renderPromptList();
         $("promptCountBadge").textContent = prompts.length;
         $("statusPromptCount").textContent = prompts.length + " 条";
         showMsg("saveAllMsg", `✅ 已删除，共 ${prompts.length} 条提示词`, "success");
     } catch (e) {
-        console.error("删除失败详情:", e);
-        showMsg("saveAllMsg", "❌ 删除失败: " + (e.message || e), "error");
+        console.error("保存失败详情:", e);
+        showMsg("saveAllMsg", "❌ 保存失败: " + (e.message || e), "error");
     }
 }
 
@@ -221,13 +228,19 @@ async function movePrompt(index, direction) {
     const newIndex = idx + dir;
     if (newIndex < 0 || newIndex >= prompts.length) return;
 
+    // 直接从本地数组移动，然后调 save 持久化
+    const item = prompts.splice(idx, 1)[0];
+    prompts.splice(newIndex, 0, item);
+    renderPromptList();
+
+    // 调 save 持久化
     try {
-        // 使用 apiGet + query 参数（官方推荐方式）
-        const data = await bridge.apiGet("prompts/move", { index: idx, direction: dir });
-        prompts = data.prompts || [];
+        const data = await bridge.apiPost("prompts/save", { prompts });
+        const result = (typeof data === 'string') ? JSON.parse(data) : data;
+        prompts = result.prompts || [];
         renderPromptList();
     } catch (e) {
-        console.error("移动失败:", e);
+        console.error("移动保存失败:", e);
     }
 }
 
