@@ -68,6 +68,26 @@ async function init() {
     $("btnAddPrompt").addEventListener("click", addPrompt);
     $("btnSaveAll").addEventListener("click", saveAllPrompts);
 
+    // ★ 事件委托：在容器上绑一个监听器，靠冒泡捕获所有按钮点击
+    $("promptList").addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const idx = parseInt(btn.dataset.index);
+        if (isNaN(idx)) return;
+
+        if (action === "delete") {
+            e.preventDefault();
+            deletePrompt(idx);
+        } else if (action === "move-up") {
+            e.preventDefault();
+            movePrompt(idx, -1);
+        } else if (action === "move-down") {
+            e.preventDefault();
+            movePrompt(idx, 1);
+        }
+    });
+
     // 初始加载
     await loadStatus();
     await loadPrompts();
@@ -127,9 +147,9 @@ function renderPromptList() {
                     />
                 </span>
                 <span class="prompt-item-actions">
-                    <button class="btn btn-sm btn-move-up" data-index="${i}" title="上移">⬆</button>
-                    <button class="btn btn-sm btn-move-down" data-index="${i}" title="下移">⬇</button>
-                    <button class="btn btn-sm btn-danger btn-delete" data-index="${i}" title="删除">🗑</button>
+                    <button class="btn btn-sm btn-move-up" data-index="${i}" data-action="move-up" title="上移">⬆</button>
+                    <button class="btn btn-sm btn-move-down" data-index="${i}" data-action="move-down" title="下移">⬇</button>
+                    <button class="btn btn-sm btn-danger btn-delete" data-index="${i}" data-action="delete" title="删除">🗑</button>
                 </span>
             </div>
             <div class="prompt-item-content">
@@ -146,27 +166,7 @@ function renderPromptList() {
         )
         .join("");
 
-    // 绑定事件（用 addEventListener 代替 onclick）
-    container.querySelectorAll(".btn-delete").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const idx = parseInt(btn.dataset.index);
-            if (!isNaN(idx)) deletePrompt(idx);
-        });
-    });
-    container.querySelectorAll(".btn-move-up").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const idx = parseInt(btn.dataset.index);
-            if (!isNaN(idx)) movePrompt(idx, -1);
-        });
-    });
-    container.querySelectorAll(".btn-move-down").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const idx = parseInt(btn.dataset.index);
-            if (!isNaN(idx)) movePrompt(idx, 1);
-        });
-    });
-
-    // 绑定输入事件，实时更新内存中的数据
+    // 绑定输入事件
     container.querySelectorAll(".prompt-name-input, .prompt-content-textarea").forEach((input) => {
         input.addEventListener("input", () => {
             const idx = parseInt(input.dataset.index);
