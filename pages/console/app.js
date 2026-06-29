@@ -222,9 +222,10 @@ async function deletePrompt(index) {
     }
     const p = prompts[idx];
     if (!p) return;
-    if (!confirm(`确定要删除提示词「${p.name || '未命名'}」吗？\n此操作不可恢复。`)) return;
+    // 注意：AstrBot Plugin Page 运行在沙箱 iframe 中，confirm() 被禁用
+    // 直接执行删除，后端 save 会持久化
 
-    showMsg("saveAllMsg", "⏳ 正在保存...", "");
+    showMsg("saveAllMsg", "⏳ 正在删除并保存...", "");
 
     // 从本地数组删除
     prompts.splice(idx, 1);
