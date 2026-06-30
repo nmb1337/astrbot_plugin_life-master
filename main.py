@@ -8,7 +8,7 @@
 - 支持插件 Page 可视化增删改查提示词
 - 支持多种提示词模板：早安晚安、回忆过往聊天、基于人格设定聊天
 - 支持免打扰时段
-- 适配 AI 智能表情包插件（astrbot_plugin_ai_sticker），静默联动发表情包
+- 适配 AI 智能表情包插件（astrbot_plugin_ai_sticker），主动消息可追加表情包，概率由表情包插件控制
 - 支持 WebUI 配置管理
 - 支持管理指令：/proactive_chat status/trigger/reload/start/stop
 
@@ -249,9 +249,6 @@ class ProactiveChatPlugin(Star):
 
     def _is_sticker_enabled(self) -> bool:
         return bool(self.config.get("enable_sticker_integration", True))
-
-    def _get_sticker_probability(self) -> int:
-        return max(0, min(100, int(self.config.get("sticker_probability", 40))))
 
     def _get_silent_start(self) -> int:
         return max(0, min(23, int(self.config.get("silent_hours_start", 0))))
@@ -679,13 +676,12 @@ class ProactiveChatPlugin(Star):
     # ------------------------------------------------------------------
 
     async def _try_get_sticker_image(self, message_text: str):
-        """尝试获取一张表情包。成功返回路径，失败返回 None（不报错）。"""
+        """
+        适配表情包插件：从已安装的 astrbot_plugin_ai_sticker 中随机选取一张图片。
+        不做概率判断——概率由表情包插件自己的 trigger_probability 控制。
+        这里只负责「如果能拿到图就追加」。
+        """
         if not self._is_sticker_enabled():
-            return None
-        prob = self._get_sticker_probability()
-        if prob <= 0:
-            return None
-        if prob < 100 and random.randint(1, 100) > prob:
             return None
 
         sticker = await self._find_sticker_plugin()
@@ -704,7 +700,7 @@ class ProactiveChatPlugin(Star):
                 return None
 
             img_path = random.choice(images)
-            logger.info(f"[主动聊天] 表情包「{category}」-> {img_path.name}")
+            logger.info(f"[主动聊天] 表情包适配「{category}」-> {img_path.name}")
             return img_path
         except Exception:
             return None
@@ -720,7 +716,7 @@ class ProactiveChatPlugin(Star):
 
         try:
             for mod_name, module in list(sys.modules.items()):
-                if 'astrbot_plugin_ai_sticker' in mod_name or 'astrbot_plugin_god' in mod_name:
+                if 'astrbot_plugin_ai_sticker' in mod_name or 'astrbot_plugin_god' in mod_name or 'sticker' in mod_name.lower():
                     for attr_name in dir(module):
                         try:
                             obj = getattr(module, attr_name)

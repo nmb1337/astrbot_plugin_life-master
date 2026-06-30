@@ -101,8 +101,7 @@ git clone https://github.com/your/astrbot_plugin_proactive_chat
 | `enable_past_conversation` | bool | true | 启用回忆过往聊天 |
 | `past_conversation_count` | int | 3 | 回忆的聊天轮数 |
 | `enable_persona_chat` | bool | true | 启用基于人格设定聊天 |
-| `enable_sticker_integration` | bool | true | 启用表情包联动（静默模式） |
-| `sticker_probability` | int | 40 | 表情包触发概率 (0-100) |
+| `enable_sticker_integration` | bool | true | 启用表情包适配（概率由表情包插件控制） |
 | `silent_hours_start` | int | 0 | 免打扰开始小时 (0-23) |
 | `silent_hours_end` | int | 0 | 免打扰结束小时 (0-23) |
 
@@ -196,11 +195,11 @@ flowchart TD
 
 ## 🎨 表情包适配
 
-若已安装「**AI 智能表情包**」插件（`astrbot_plugin_ai_sticker`），主动聊天消息可自动搭配表情包。
+本插件可适配「**AI 智能表情包**」插件（`astrbot_plugin_ai_sticker`）。
 
-**工作方式**：插件静默检测表情包插件是否可用，可用则随机选取表情包追加到消息末尾，不可用则静默跳过，不影响正常聊天。没有任何 UI 状态指示器。
+**适配方式**：主动聊天插件不自行判断是否要加表情包（不做概率控制），而是直接调用表情包插件的分类和图片资源，从已有分类中随机选取一张追加到消息末尾。表情包的概率、冷却、群黑白名单等策略完全由表情包插件自身的配置控制，两个插件职责分明。
 
-**配置**：在 WebUI 配置中调整 `enable_sticker_integration`（开关）和 `sticker_probability`（触发概率）。
+**配置**：在 WebUI 配置中开关 `enable_sticker_integration` 即可。无需额外概率设置。
 
 ## 📋 依赖
 

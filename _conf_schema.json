@@ -85,17 +85,10 @@
     "hint": "开启后，机器人会根据用户在 AstrBot 中为其设置的人格（Persona）来生成聊天内容。"
   },
   "enable_sticker_integration": {
-    "description": "启用表情包联动",
+    "description": "启用表情包适配",
     "type": "bool",
     "default": true,
-    "hint": "开启后，若已安装「AI智能表情包」插件，主动消息会自动搭配表情包。未安装时静默跳过。"
-  },
-  "sticker_probability": {
-    "description": "表情包联动概率",
-    "type": "int",
-    "default": 40,
-    "hint": "主动消息搭配表情包的概率（0-100）。仅在启用表情包联动时生效。",
-    "slider": {"min": 0, "max": 100, "step": 5}
+    "hint": "开启后，若已安装「AI智能表情包」插件，主动消息会自动从表情包插件中随机选取一张图片追加到消息末尾。概率由表情包插件自身控制。"
   },
   "silent_hours_start": {
     "description": "免打扰开始时间（时）",
