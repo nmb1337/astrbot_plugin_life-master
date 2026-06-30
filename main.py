@@ -5,12 +5,13 @@
 - 机器人根据设定的提示词主动向群聊发送消息
 - 支持随机时间间隔（最小/最大间隔之间随机选取）
 - 支持多条自定义提示词，机器人每次随机选择一条
+- 双阶段生成：先定聊天意图，再生成自然消息
+- 自动注入真实聊天记录，避免 AI 说"我没有历史记录"
+- 黑名单过滤 + 自动重试，杜绝"我是AI"等机械回复
 - 支持插件 Page 可视化增删改查提示词
-- 支持多种提示词模板：早安晚安、回忆过往聊天、基于人格设定聊天
 - 支持免打扰时段
-- 适配 AI 智能表情包插件（astrbot_plugin_ai_sticker），主动消息可追加表情包，概率由表情包插件控制
+- 适配 AI 智能表情包插件（astrbot_plugin_ai_sticker）
 - 支持 WebUI 配置管理
-- 支持管理指令：/proactive_chat status/trigger/reload/start/stop
 
 兼容：AstrBot v4.16+
 """
@@ -18,6 +19,7 @@
 import asyncio
 import json
 import random
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -29,31 +31,89 @@ from astrbot.api.event import MessageChain
 
 PLUGIN_NAME = "astrbot_plugin_proactive_chat"
 
-# ---- 默认提示词 ----
+# ---- 聊天意图模板 ----
+CHAT_INTENTS = [
+    {
+        "name": "分享日常",
+        "prompt": "你是一个普通人，正在和朋友聊天。请分享一件最近发生的日常小事（可以是吐槽天气、路上看到的有趣事情、吃了什么好吃的等）。语气轻松随意，像微信聊天。控制在30字以内。"
+    },
+    {
+        "name": "关心对方",
+        "prompt": "你是一个关心朋友的人。请用温暖但不过分的语气问候对方，比如问对方今天过得怎么样、吃饭了没、最近忙不忙。语气像老朋友，不要像客服。控制在30字以内。"
+    },
+    {
+        "name": "调侃",
+        "prompt": "你和对方是很熟的朋友。请用轻松调侃的语气说一句话，可以开个小玩笑，或者幽默地吐槽一下生活。注意分寸，不要冒犯。控制在30字以内。"
+    },
+    {
+        "name": "提问",
+        "prompt": "你是一个好奇心旺盛的朋友。请提一个有趣的问题引发对方聊天兴趣，比如问对方是否看过某部电影、听过某首歌、去过某个地方。问题要自然，不要像采访。控制在30字以内。"
+    },
+    {
+        "name": "吐槽",
+        "prompt": "你今天遇到了一些小烦恼。请用略带吐槽但幽默的语气说一句话，比如抱怨天气太热、周一太困、快递太慢等。要让人有共鸣感。控制在30字以内。"
+    },
+    {
+        "name": "分享见闻",
+        "prompt": "你最近了解到一个有趣的事情。请用分享的语气告诉对方，比如看到的一个冷知识、一个有趣的新闻、一个好玩的梗。要让人觉得新鲜有趣。控制在30字以内。"
+    },
+    {
+        "name": "延续话题",
+        "prompt": "请根据最近和对方的聊天内容，自然地继续聊下去。如果最近聊了某个话题，接着往下说；如果没有可延续的话题，就微笑打招呼然后自然地切换到其他话题。控制在30字以内。"
+    },
+    {
+        "name": "打招呼",
+        "prompt": "你看到朋友在线，想打个招呼开启对话。请用轻松自然的语气说一句问候，可以带一个 emoji 但不要每句都用。像微信上跟朋友打招呼一样。控制在20字以内。"
+    },
+]
+
+# ---- 禁止输出的黑名单短语 ----
+BLACKLIST_PATTERNS = [
+    r"我是AI",
+    r"作为AI",
+    r"作为人工智能",
+    r"我没有历史记录",
+    r"我无法查看历史",
+    r"我无法访问.*记录",
+    r"我记不得.*聊天",
+    r"我没有.*记忆",
+    r"为了保护隐私",
+    r"给我一点提示",
+    r"给我.*提示",
+    r"我的.*限制",
+    r"我是.*机器人",
+    r"作为.*语言模型",
+    r"我是.*模型",
+    r"我.*训练数据",
+    r"我不能.*浏览",
+    r"我无法.*上网",
+    r"我.*知识截止",
+    r"我是个AI",
+]
+
+MAX_RETRY = 2  # 黑名单命中后最多重试次数
+
+# ---- 默认提示词（用户可在 Plugin Page 中自定义） ----
 DEFAULT_PROMPTS = [
     {
         "name": "早安问候",
-        "content": "现在是早上，请以轻松愉快的语气问早安，结合当天的日期和天气感觉，自然地开启新一天的话题。消息要自然简短，像真人朋友一样。"
+        "content": "现在是早上，请用轻松自然的语气问早安，像朋友一样。控制在25字以内。"
     },
     {
         "name": "晚安问候",
-        "content": "现在是晚上，请以温暖关心的语气说晚安，可以提醒早点休息，或者说一些暖心的话。消息要自然简短。"
+        "content": "现在是晚上，请用温暖简短的话说晚安。控制在20字以内。"
     },
     {
-        "name": "回忆聊天",
-        "content": "请回顾最近的聊天记录，找一个之前聊过但还没结束的话题，自然地继续聊下去。比如之前聊过的电影、音乐、游戏、美食等话题。语气要像朋友间的日常对话。"
+        "name": "日常闲聊",
+        "content": "请像朋友一样随便聊点什么，分享日常、吐槽天气、问问对方近况都行。语气自然轻松，控制在30字以内。不要提到自己是AI或机器人。"
     },
     {
         "name": "人格话题",
-        "content": "请根据你的人格设定({persona})中的特征、爱好或背景故事，自然地引出相关话题。比如你的人格设定中提到喜欢某样东西，你可以分享相关的趣事或问问对方的看法。"
-    },
-    {
-        "name": "日常分享",
-        "content": "请像一个普通朋友一样，分享一些日常生活中的小趣事或感悟。可以是对天气的吐槽、对某件事的看法、或者一个有趣的小问题来引发讨论。语气轻松自然。"
+        "content": "根据人格设定({persona})中的特征或爱好自然引出话题。控制在30字以内。不要提到自己是AI。"
     },
     {
         "name": "热点话题",
-        "content": "根据当前日期({current_time})，聊聊最近可能的热门话题或节日氛围。可以是最近的节假日安排、季节变化、或者一些轻松有趣的社会话题。"
+        "content": "根据当前日期({current_time})，聊一个轻松的热门话题或节日。控制在30字以内。不要提到自己是AI。"
     },
 ]
 
@@ -202,25 +262,17 @@ class ProactiveChatPlugin(Star):
         return max(int(self.config.get("max_interval_seconds", 7200)),
                    self._get_min_interval() + 60)
 
-    def _get_prompt_template(self) -> str:
-        """获取兜底提示词模板（当自定义提示词列表为空时使用）"""
-        return self.config.get(
-            "prompt_template",
-            "你是一个聊天机器人，现在你需要主动发起聊天。\n\n"
-            "你的身份设定：\n{persona}\n\n"
-            "当前时间：{current_time}\n\n"
-            "{extra_context}\n\n"
-            "请根据以上信息，自然地发送一条消息，主动开启话题。"
-            "消息要求：\n"
-            "1. 语气自然、口语化，像真人朋友聊天\n"
-            "2. 消息简短（控制在100字以内）\n"
-            "3. 符合你的身份设定\n"
-            "4. 不要提及\"主动聊天\"、\"提示词\"等元信息\n\n"
-            "请直接输出你要发送的消息内容，不要带任何前缀、引号或解释。",
-        )
+    def _get_silent_start(self) -> int:
+        return bool(self.config.get("enable_sticker_integration", True))
+
+    def _get_silent_start(self) -> int:
+        return max(0, min(23, int(self.config.get("silent_hours_start", 0))))
+
+    def _get_silent_end(self) -> int:
+        return max(0, min(23, int(self.config.get("silent_hours_end", 0))))
 
     def _get_custom_prompts(self) -> list[dict]:
-        """获取自定义提示词列表"""
+        """获取自定义提示词列表（供 Web API 和状态显示使用）"""
         raw = self.config.get("custom_prompts", "[]")
         if isinstance(raw, list):
             return raw
@@ -230,28 +282,11 @@ class ProactiveChatPlugin(Star):
                 if isinstance(parsed, list):
                     return parsed
             except (json.JSONDecodeError, TypeError):
-                logger.warning("[主动聊天] 自定义提示词 JSON 解析失败，使用默认提示词")
-        # 返回默认提示词
+                pass
         return list(DEFAULT_PROMPTS)
-
-    def _pick_random_prompt(self) -> str:
-        """从提示词列表中随机选择一条，返回提示词内容文本"""
-        prompts = self._get_custom_prompts()
-        if not prompts:
-            # 兜底：使用旧的 prompt_template
-            return self._get_prompt_template()
-
-        picked = random.choice(prompts)
-        name = picked.get("name", "未命名")
-        content = picked.get("content", "")
-        logger.info(f"[主动聊天] 随机选中提示词: 「{name}」")
-        return content
 
     def _is_sticker_enabled(self) -> bool:
         return bool(self.config.get("enable_sticker_integration", True))
-
-    def _get_silent_start(self) -> int:
-        return max(0, min(23, int(self.config.get("silent_hours_start", 0))))
 
     def _get_silent_end(self) -> int:
         return max(0, min(23, int(self.config.get("silent_hours_end", 0))))
@@ -313,27 +348,39 @@ class ProactiveChatPlugin(Star):
                     return
 
     # ------------------------------------------------------------------
-    # 消息生成与发送
+    # 消息生成与发送（双阶段 + 黑名单 + 重试）
     # ------------------------------------------------------------------
 
     async def _send_proactive_message(self, umo: str, target: str):
-        """生成并发送一条主动聊天消息"""
+        """生成并发送一条主动聊天消息（双阶段 + 过滤 + 重试）"""
         logger.info(f"[主动聊天] 开始为 {target} 生成主动消息...")
 
-        # 1. 构建提示词
-        prompt = await self._build_prompt(umo)
-        prompt_preview = prompt[:300].replace("\n", " ")
-        logger.info(f"[主动聊天] 提示词预览: {prompt_preview}...")
+        # 阶段0: 收集真实上下文
+        persona_text = await self._get_persona_context(umo)
+        chat_history = await self._get_recent_chat_text(umo)
+        time_str = self._current_time_str()
 
-        # 2. 调用 AI 生成消息
-        message_text = await self._generate_message(prompt, umo)
+        # 阶段1: 选定聊天意图
+        intent = random.choice(CHAT_INTENTS)
+        intent_name = intent["name"]
+        logger.info(f"[主动聊天] 选定意图: 「{intent_name}」")
+
+        # 阶段2: 根据意图 + 上下文生成消息，带黑名单过滤和重试
+        message_text = await self._generate_with_retry(
+            intent=intent,
+            persona_text=persona_text,
+            chat_history=chat_history,
+            time_str=time_str,
+            umo=umo,
+        )
+
         if not message_text:
-            logger.warning("[主动聊天] AI 返回空消息，跳过发送")
+            logger.warning("[主动聊天] 生成失败（重试耗尽），跳过发送")
             return
 
-        logger.info(f"[主动聊天] AI 生成: {message_text}")
+        logger.info(f"[主动聊天] 最终消息: {message_text}")
 
-        # 3. 尝试搭配表情包（静默，失败不报错）
+        # 发送
         import astrbot.api.message_components as Comp
         chain = [Comp.Plain(message_text)]
         sticker_path = await self._try_get_sticker_image(message_text)
@@ -341,9 +388,8 @@ class ProactiveChatPlugin(Star):
             try:
                 chain.append(Comp.Image.fromFileSystem(str(sticker_path)))
             except Exception:
-                pass  # 表情包追加失败不影响主流程
+                pass
 
-        # 4. 发送
         try:
             message_chain = MessageChain()
             for comp in chain:
@@ -362,58 +408,128 @@ class ProactiveChatPlugin(Star):
         except Exception as e:
             logger.error(f"[主动聊天] 发送失败: {e}", exc_info=True)
 
-    async def _build_prompt(self, umo: str) -> str:
-        """构建完整的发送提示词，随机选择一条自定义提示词作为骨架"""
-        # 随机选择提示词
-        selected_prompt = self._pick_random_prompt()
-        template = selected_prompt
-
-        # 人格设定
-        persona_text = await self._get_persona_context(umo)
-
-        # 时间
-        weekdays = ["日", "一", "二", "三", "四", "五", "六"]
-        wd = weekdays[datetime.now().weekday()]
-        current_time = datetime.now().strftime(f"%Y年%m月%d日 %H:%M，星期{wd}")
-
-        # 额外上下文
-        extra_parts = []
-
-        # 时段问候
-        if self.config.get("enable_time_greeting", True):
-            hour = datetime.now().hour
-            if 6 <= hour < 9:
-                greeting = self.config.get(
-                    "morning_greeting_prompt",
-                    "现在是早上，请以轻松愉快的语气问早安。"
-                )
-                extra_parts.append(f"[时段提示]\n{greeting}")
-            elif 21 <= hour < 24:
-                greeting = self.config.get(
-                    "night_greeting_prompt",
-                    "现在是晚上，请以温暖关心的语气说晚安。"
-                )
-                extra_parts.append(f"[时段提示]\n{greeting}")
-
-        # 过往聊天回忆
-        if self.config.get("enable_past_conversation", True):
-            past = await self._get_past_conversation_context(umo)
-            if past:
-                extra_parts.append(f"[过往聊天回忆]\n{past}")
-
-        # 人格参考
-        if self.config.get("enable_persona_chat", True) and persona_text:
-            extra_parts.append(
-                "[人格设定参考]\n你可以根据以上人格设定中的特征、爱好、背景故事来开启话题。"
+    async def _generate_with_retry(
+        self, intent: dict, persona_text: str, chat_history: str,
+        time_str: str, umo: str
+    ) -> str | None:
+        """带黑名单过滤和重试的消息生成"""
+        for attempt in range(MAX_RETRY + 1):
+            prompt = self._build_stage2_prompt(
+                intent=intent,
+                persona_text=persona_text,
+                chat_history=chat_history,
+                time_str=time_str,
+                is_retry=(attempt > 0),
             )
 
-        extra_context = "\n\n".join(extra_parts) if extra_parts else "（自由发挥，开启一个有趣的话题）"
+            msg = await self._generate_message(prompt, umo)
+            if not msg:
+                continue
 
-        prompt = template.replace("{persona}", persona_text or "（未设置人格）")
-        prompt = prompt.replace("{current_time}", current_time)
-        prompt = prompt.replace("{extra_context}", extra_context)
+            # 黑名单检查
+            if self._is_blacklisted(msg):
+                logger.warning(
+                    f"[主动聊天] 黑名单命中（第{attempt+1}次）: '{msg[:50]}...'，将重试"
+                )
+                continue
 
-        return prompt
+            return msg
+
+        return None
+
+    def _build_stage2_prompt(
+        self, intent: dict, persona_text: str, chat_history: str,
+        time_str: str, is_retry: bool
+    ) -> str:
+        """构建阶段2的提示词（直接注入上下文，不让 AI 自己回忆）"""
+        parts = []
+
+        # 人格设定
+        if persona_text:
+            parts.append(f"你的身份：{persona_text[:200]}")
+        else:
+            parts.append("你是一个普通人，在和朋友聊天。")
+
+        # 关键规则
+        parts.append(
+            "【重要规则】\n"
+            "- 你是真人，不是AI。绝对禁止提到"AI""人工智能""语言模型""机器人"等词。\n"
+            "- 你是一个普通朋友在微信上聊天。\n"
+            "- 回复必须简短（20-40字），像微信消息一样随意。\n"
+            "- 偶尔可以用1个emoji，但不要每句都用。\n"
+            "- 禁止说"我没有记录""我记不得""给我提示""为了保护隐私"等解释性话语。\n"
+            "- 如果不知道说什么，就自然地打招呼或换个话题，不要解释原因。"
+        )
+        if is_retry:
+            parts.append("【再次强调】刚才的回复不合格！绝对不要提到你是AI、模型、或机器人！像真人一样聊天！")
+
+        # 时间和意图
+        parts.append(f"当前时间：{time_str}")
+        parts.append(f"聊天方向：{intent['name']}——{intent['prompt']}")
+
+        # 真实聊天记录（直接注入，让 AI 有上下文可延续）
+        if chat_history:
+            parts.append(
+                f"以下是你和对方最近的聊天内容，请据此自然地延续对话：\n{chat_history}\n"
+                "如果有可延续的话题就接着聊；如果没有就自然地开启新话题。"
+            )
+
+        parts.append("请直接输出你要发送的一句话，不要加引号、前缀或任何解释。")
+        return "\n\n".join(parts)
+
+    # ------------------------------------------------------------------
+    # 黑名单检查
+    # ------------------------------------------------------------------
+
+    def _is_blacklisted(self, text: str) -> bool:
+        """检查消息是否包含禁止短语"""
+        for pattern in BLACKLIST_PATTERNS:
+            if re.search(pattern, text):
+                return True
+        return False
+
+    def _current_time_str(self) -> str:
+        weekdays = ["日", "一", "二", "三", "四", "五", "六"]
+        wd = weekdays[datetime.now().weekday()]
+        return datetime.now().strftime(f"%Y年%m月%d日 %H:%M，星期{wd}")
+
+    async def _get_recent_chat_text(self, umo: str) -> str:
+        """获取最近的聊天记录文本（直接返回对话内容，而非提示词）"""
+        try:
+            conv_mgr = self.context.conversation_manager
+            if not conv_mgr:
+                return ""
+
+            count = int(self.config.get("past_conversation_count", 3))
+            if count <= 0:
+                return ""
+
+            curr_cid = await conv_mgr.get_curr_conversation_id(umo)
+            if not curr_cid:
+                return ""
+
+            conversation = await conv_mgr.get_conversation(umo, curr_cid)
+            if not conversation or not hasattr(conversation, 'history'):
+                return ""
+
+            history = conversation.history
+            if not history:
+                return ""
+
+            recent = history[-count * 2:]
+            lines = []
+            for msg in recent:
+                if hasattr(msg, 'content') and msg.content:
+                    for part in msg.content:
+                        if hasattr(part, 'text') and part.text:
+                            text = part.text[:100]
+                            role = "对方" if getattr(msg, 'role', '') == 'user' else "我"
+                            lines.append(f"{role}：{text}")
+
+            return "\n".join(lines) if lines else ""
+        except Exception as e:
+            logger.warning(f"[主动聊天] 获取聊天记录失败: {e}")
+            return ""
 
     async def _generate_message(self, prompt: str, umo: str = "") -> str | None:
         """调用 AI 生成消息"""
@@ -493,46 +609,6 @@ class ProactiveChatPlugin(Star):
             return ""
         except Exception as e:
             logger.warning(f"[主动聊天] 获取人格失败: {e}")
-            return ""
-
-    async def _get_past_conversation_context(self, umo: str) -> str:
-        """获取过往聊天记录"""
-        try:
-            conv_mgr = self.context.conversation_manager
-            if not conv_mgr:
-                return ""
-
-            count = int(self.config.get("past_conversation_count", 3))
-            if count <= 0:
-                return ""
-
-            curr_cid = await conv_mgr.get_curr_conversation_id(umo)
-            if not curr_cid:
-                return ""
-
-            conversation = await conv_mgr.get_conversation(umo, curr_cid)
-            if not conversation or not hasattr(conversation, 'history'):
-                return ""
-
-            history = conversation.history
-            if not history:
-                return ""
-
-            recent = history[-count * 2:]
-            lines = []
-            for msg in recent:
-                if hasattr(msg, 'content') and msg.content:
-                    for part in msg.content:
-                        if hasattr(part, 'text') and part.text:
-                            text = part.text[:80]
-                            role = "用户" if getattr(msg, 'role', '') == 'user' else "机器人"
-                            lines.append(f"[{role}]: {text}")
-
-            if lines:
-                return "最近聊天记录：\n" + "\n".join(lines)
-            return ""
-        except Exception as e:
-            logger.warning(f"[主动聊天] 获取聊天记录失败: {e}")
             return ""
 
     # ------------------------------------------------------------------
