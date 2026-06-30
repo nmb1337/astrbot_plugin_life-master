@@ -390,23 +390,35 @@ class ProactiveChatPlugin(Star):
             except Exception:
                 pass
 
-        try:
-            message_chain = MessageChain()
-            for comp in chain:
-                if isinstance(comp, Comp.Plain):
-                    message_chain.message(comp.text)
-                elif isinstance(comp, Comp.Image):
-                    file_path = getattr(comp, 'file', None)
-                    if file_path:
-                        message_chain.file_image(file_path)
-                    else:
-                        url = getattr(comp, 'url', None)
-                        if url:
-                            message_chain.image(url)
-            await self.context.send_message(umo, message_chain)
-            logger.info(f"[主动聊天] ✅ 已向 {target} 发送主动消息")
-        except Exception as e:
-            logger.error(f"[主动聊天] 发送失败: {e}", exc_info=True)
+        # 发送（带重试，应对 NapCat 偶发超时）
+        SEND_MAX_RETRY = 2
+        for send_attempt in range(SEND_MAX_RETRY + 1):
+            try:
+                message_chain = MessageChain()
+                for comp in chain:
+                    if isinstance(comp, Comp.Plain):
+                        message_chain.message(comp.text)
+                    elif isinstance(comp, Comp.Image):
+                        file_path = getattr(comp, 'file', None)
+                        if file_path:
+                            message_chain.file_image(file_path)
+                        else:
+                            url = getattr(comp, 'url', None)
+                            if url:
+                                message_chain.image(url)
+                await self.context.send_message(umo, message_chain)
+                logger.info(f"[主动聊天] ✅ 已向 {target} 发送主动消息")
+                break
+            except Exception as e:
+                err_str = str(e)
+                # NapCat 1200 超时等瞬态错误：短暂等待后重试
+                if ("1200" in err_str or "Timeout" in err_str or "timeout" in err_str.lower()) \
+                   and send_attempt < SEND_MAX_RETRY:
+                    logger.warning(f"[主动聊天] 发送超时（第{send_attempt+1}次），3秒后重试...")
+                    await asyncio.sleep(3)
+                else:
+                    logger.error(f"[主动聊天] 发送失败: {e}", exc_info=True)
+                    break
 
     async def _generate_with_retry(
         self, intent: dict, persona_text: str, chat_history: str,
