@@ -560,19 +560,39 @@ class ProactiveChatPlugin(Star):
     def _resolve_umo(self, target: str, target_type: str = "群聊") -> str | None:
         """
         解析 unified_msg_origin。
-        target_type: "群聊" -> aiocqhttp:GroupMessage:{id}, "私聊" -> aiocqhttp:PrivateMessage:{id}
-        也支持完整 UMO 格式直接使用。
+        自动查找 aiocqhttp 平台的真实 platform_id（而非硬编码名称），
+        构造正确格式: {platform_id}:GroupMessage:{id} 或 {platform_id}:FriendMessage:{id}
         """
         target = target.strip()
         if not target:
             return None
         if ":" in target and target.count(":") >= 2:
             return target
-        if target.isdigit():
-            if target_type == "私聊":
-                return f"aiocqhttp:PrivateMessage:{target}"
-            return f"aiocqhttp:GroupMessage:{target}"
-        logger.warning(f"[主动聊天] 无法解析目标: {target}")
+        if not target.isdigit():
+            logger.warning(f"[主动聊天] 无法解析目标: {target}")
+            return None
+
+        # 动态查找 aiocqhttp 平台的真实 ID
+        platform_id = self._find_aiocqhttp_platform_id()
+        if not platform_id:
+            logger.warning("[主动聊天] 未找到 aiocqhttp 平台，无法构造 UMO")
+            return None
+
+        if target_type == "私聊":
+            return f"{platform_id}:FriendMessage:{target}"
+        return f"{platform_id}:GroupMessage:{target}"
+
+    def _find_aiocqhttp_platform_id(self) -> str | None:
+        """查找 aiocqhttp 平台的真实唯一 ID"""
+        try:
+            pm = self.context.platform_manager
+            for inst in pm.platform_insts:
+                meta = inst.meta()
+                if meta.name == "aiocqhttp":
+                    logger.info(f"[主动聊天] 找到 aiocqhttp 平台，ID: {meta.id}")
+                    return meta.id
+        except Exception as e:
+            logger.warning(f"[主动聊天] 查找平台 ID 失败: {e}")
         return None
 
     # ------------------------------------------------------------------

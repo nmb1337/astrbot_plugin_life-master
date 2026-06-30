@@ -213,7 +213,7 @@ flowchart TD
 
 ### 多平台配置
 
-默认情况下，插件将纯数字群号解析为 `aiocqhttp:GroupMessage:{group_id}`，纯数字 QQ 号（私聊）解析为 `aiocqhttp:PrivateMessage:{qq}`。
+默认情况下，插件会自动查找 aiocqhttp 平台的真实 ID 并构造正确格式的 UMO。群号为 `{platform_id}:GroupMessage:{group_id}`，QQ 号为 `{platform_id}:FriendMessage:{qq}`。
 
 如果你使用其他平台（如 Telegram、Discord 等），请在 `target_groups` 中填写完整的 `unified_msg_origin` 格式：
 
