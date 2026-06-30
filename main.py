@@ -33,11 +33,11 @@ PLUGIN_NAME = "astrbot_plugin_proactive_chat"
 DEFAULT_PROMPTS = [
     {
         "name": "早安问候",
-        "content": "现在是早上，请以轻松愉快的语气向群友问早安，结合当天的日期和天气感觉，自然地开启新一天的话题。消息要自然简短，像真人朋友一样。"
+        "content": "现在是早上，请以轻松愉快的语气问早安，结合当天的日期和天气感觉，自然地开启新一天的话题。消息要自然简短，像真人朋友一样。"
     },
     {
         "name": "晚安问候",
-        "content": "现在是晚上，请以温暖关心的语气向群友说晚安，可以提醒大家早点休息，或者说一些暖心的话。消息要自然简短。"
+        "content": "现在是晚上，请以温暖关心的语气说晚安，可以提醒早点休息，或者说一些暖心的话。消息要自然简短。"
     },
     {
         "name": "回忆聊天",
@@ -45,7 +45,7 @@ DEFAULT_PROMPTS = [
     },
     {
         "name": "人格话题",
-        "content": "请根据你的人格设定({persona})中的特征、爱好或背景故事，自然地引出相关话题。比如你的人格设定中提到喜欢某样东西，你可以分享相关的趣事或问群友的看法。"
+        "content": "请根据你的人格设定({persona})中的特征、爱好或背景故事，自然地引出相关话题。比如你的人格设定中提到喜欢某样东西，你可以分享相关的趣事或问问对方的看法。"
     },
     {
         "name": "日常分享",
@@ -53,7 +53,7 @@ DEFAULT_PROMPTS = [
     },
     {
         "name": "热点话题",
-        "content": "根据当前日期({current_time})，聊聊最近可能的热门话题或节日氛围。可以是最近的节假日安排、季节变化、或者一些轻松有趣的社会话题。引导群友参与讨论。"
+        "content": "根据当前日期({current_time})，聊聊最近可能的热门话题或节日氛围。可以是最近的节假日安排、季节变化、或者一些轻松有趣的社会话题。"
     },
 ]
 
@@ -210,7 +210,7 @@ class ProactiveChatPlugin(Star):
             "你的身份设定：\n{persona}\n\n"
             "当前时间：{current_time}\n\n"
             "{extra_context}\n\n"
-            "请根据以上信息，自然地向群聊发送一条消息，主动开启话题。"
+            "请根据以上信息，自然地发送一条消息，主动开启话题。"
             "消息要求：\n"
             "1. 语气自然、口语化，像真人朋友聊天\n"
             "2. 消息简短（控制在100字以内）\n"
@@ -388,13 +388,13 @@ class ProactiveChatPlugin(Star):
             if 6 <= hour < 9:
                 greeting = self.config.get(
                     "morning_greeting_prompt",
-                    "现在是早上，请以轻松愉快的语气向群友问早安。"
+                    "现在是早上，请以轻松愉快的语气问早安。"
                 )
                 extra_parts.append(f"[时段提示]\n{greeting}")
             elif 21 <= hour < 24:
                 greeting = self.config.get(
                     "night_greeting_prompt",
-                    "现在是晚上，请以温暖关心的语气向群友说晚安。"
+                    "现在是晚上，请以温暖关心的语气说晚安。"
                 )
                 extra_parts.append(f"[时段提示]\n{greeting}")
 
@@ -563,7 +563,7 @@ class ProactiveChatPlugin(Star):
     def _resolve_umo(self, target: str, target_type: str = "群聊") -> str | None:
         """
         解析 unified_msg_origin。
-        target_type: "群聊" -> aiocqhttp:group:{id}, "私聊" -> aiocqhttp:private:{id}
+        target_type: "群聊" -> aiocqhttp:GroupMessage:{id}, "私聊" -> aiocqhttp:PrivateMessage:{id}
         也支持完整 UMO 格式直接使用。
         """
         target = target.strip()
@@ -573,8 +573,8 @@ class ProactiveChatPlugin(Star):
             return target
         if target.isdigit():
             if target_type == "私聊":
-                return f"aiocqhttp:private:{target}"
-            return f"aiocqhttp:group:{target}"
+                return f"aiocqhttp:PrivateMessage:{target}"
+            return f"aiocqhttp:GroupMessage:{target}"
         logger.warning(f"[主动聊天] 无法解析目标: {target}")
         return None
 
